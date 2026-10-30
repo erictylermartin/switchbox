@@ -1,0 +1,1007 @@
+<title>Switchbox</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap">
+<style>
+/* Layout: like the 1986 screen. Player boxes flank the switchbox on wide screens and sit above it on phones; controls and status underneath. Single deliberate dark cabinet look. */
+:root {
+  --crt: #1b1640;        /* screen background, deep indigo */
+  --panel: #2a2262;      /* raised panels */
+  --rule: #4a3f97;       /* frames and dividers */
+  --ink: #f4e9cf;        /* cream text and resting balls */
+  --dim: #9a90c8;        /* secondary text */
+  --switch: #f2a541;     /* switch amber */
+  --p1: #5fd3e6;         /* player 1 cyan */
+  --p2: #f2709c;         /* player 2 pink */
+  --gold: #ffd75e;       /* highlights */
+  /* the playfield, after the 1986 Commodore screen */
+  --field: #8a84dc;      /* light blue field */
+  --wall: #2a2370;       /* walls, entry bar, exit values */
+  --lane: #625bb8;       /* lane lines */
+  --sw: #eeebfb;         /* switches */
+  --sw-hi: #ffffff;      /* a switch the moment it flips */
+  --ball: #1a1542;       /* resting balls */
+  --font-display: "Press Start 2P", "Courier New", monospace;
+  --font-body: "VT323", "Courier New", monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  background: var(--crt);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 20px;
+  line-height: 1.25;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px 32px;
+}
+.cab { max-width: 1040px; margin: 0 auto; display: grid; gap: 14px; }
+header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 6px 16px; }
+h1 { font-family: var(--font-display); font-size: clamp(18px, 4vw, 28px); margin: 0; letter-spacing: 2px; color: var(--switch); text-shadow: 3px 3px 0 var(--rule); }
+.credit { color: var(--dim); font-size: 18px; }
+
+.table { display: grid; gap: 12px; grid-template-columns: minmax(0,1fr) minmax(0,1fr); grid-template-areas: "p1 p2" "screen screen"; align-items: start; }
+.player.p1 { grid-area: p1; } .player.p2 { grid-area: p2; } .screen { grid-area: screen; }
+@media (min-width: 780px) { .table { grid-template-columns: 168px minmax(0,1fr) 168px; grid-template-areas: "p1 screen p2"; } }
+.player { display: grid; gap: 8px; min-width: 0; }
+.player .name { font-family: var(--font-display); font-size: 11px; letter-spacing: 1px; }
+.player.p1 .name { color: var(--p1); }
+.player.p2 .name { color: var(--p2); }
+.player .box { background: var(--panel); border: 3px solid var(--rule); box-shadow: inset 3px 3px 0 #120e2e; padding: 12px; display: grid; gap: 2px; }
+.player .pts { font-family: var(--font-display); font-size: clamp(22px, 5vw, 30px); font-variant-numeric: tabular-nums; }
+.player .sub, .player .total { color: var(--dim); font-size: 18px; }
+.player .total b { font-family: var(--font-display); font-size: 13px; font-weight: normal; color: var(--ink); font-variant-numeric: tabular-nums; }
+.player.active.p1 .box { border-color: var(--p1); box-shadow: inset 3px 3px 0 #120e2e, 0 0 0 3px color-mix(in srgb, var(--p1) 30%, transparent); }
+.player.active.p2 .box { border-color: var(--p2); box-shadow: inset 3px 3px 0 #120e2e, 0 0 0 3px color-mix(in srgb, var(--p2) 30%, transparent); }
+.player .tag { font-family: var(--font-display); font-size: 8px; color: var(--crt); background: var(--gold); padding: 4px 6px; justify-self: start; }
+@media (min-width: 780px) { .player.p2 { text-align: right; } .player.p2 .tag { justify-self: end; } }
+
+.screen { background: var(--wall); border-radius: 18px; padding: 8px 10px 12px; box-shadow: inset 0 0 0 3px #1a1550, 0 6px 0 #0c0a22; display: grid; gap: 6px; min-width: 0; }
+.roundbar { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-family: var(--font-display); font-size: 9px; letter-spacing: 1px; color: var(--sw); padding: 2px 6px 0; }
+.roundbar #rname { color: var(--gold); }
+@media (max-width: 520px) {
+  .screen { padding: 6px 4px 8px; border-radius: 12px; }
+  .player .box { padding: 8px 10px; }
+  .status { font-size: 20px; }
+}
+.roundbar b { font-weight: normal; }
+canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; image-rendering: crisp-edges; cursor: pointer; touch-action: manipulation; }
+canvas:focus-visible { outline: 3px dashed var(--gold); outline-offset: 2px; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+button {
+  font-family: var(--font-display); font-size: 10px; letter-spacing: 1px;
+  color: var(--ink); background: var(--panel); border: 3px solid var(--rule);
+  padding: 9px 12px; cursor: pointer; box-shadow: 3px 3px 0 #0c0a22;
+}
+button:hover:not(:disabled) { border-color: var(--switch); }
+button:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #0c0a22; }
+button:focus-visible { outline: 3px dashed var(--gold); outline-offset: 2px; }
+button:disabled { opacity: .45; cursor: default; }
+button kbd { font-family: inherit; color: var(--gold); }
+.opp-pick { display: flex; align-items: center; gap: 8px; font-size: 18px; color: var(--dim); }
+select { font-family: var(--font-display); font-size: 10px; color: var(--ink); background: var(--panel); border: 3px solid var(--rule); padding: 8px 10px; box-shadow: 3px 3px 0 #0c0a22; }
+select:focus-visible { outline: 3px dashed var(--gold); outline-offset: 2px; }
+.status { font-size: 22px; min-height: 28px; flex: 1 1 260px; min-width: 0; }
+.status .who1 { color: var(--p1); } .status .who2 { color: var(--p2); }
+
+details { background: var(--panel); border: 3px solid var(--rule); padding: 10px 14px; }
+summary { font-family: var(--font-display); font-size: 10px; cursor: pointer; color: var(--switch); letter-spacing: 1px; }
+details ul { margin: 10px 0 2px; padding-left: 20px; display: grid; gap: 6px; max-width: 68ch; }
+details li::marker { color: var(--switch); }
+details + details { margin-top: 0; }
+.opts { display: grid; gap: 14px; margin-top: 12px; }
+.check { display: flex; gap: 10px; align-items: flex-start; max-width: 75ch; cursor: pointer; }
+.check input { width: 20px; height: 20px; margin-top: 3px; accent-color: var(--gold); flex: none; }
+.vals { display: grid; gap: 6px; min-width: 0; }
+.vals .label { font-family: var(--font-display); font-size: 9px; letter-spacing: 1px; color: var(--dim); }
+.note { color: var(--dim); font-size: 18px; margin: 0; }
+.vals .tbl { overflow-x: auto; }
+#valTable { border-collapse: collapse; width: auto; }
+#valTable th, #valTable td { padding: 3px 4px; text-align: center; }
+#valTable thead th { font-family: var(--font-body); font-size: 16px; color: var(--dim); font-weight: normal; }
+#valTable tbody th { text-align: left; color: var(--ink); font-weight: normal; white-space: nowrap; padding-right: 10px; }
+#valTable input { width: 3.4em; font-family: var(--font-body); font-size: 20px; color: var(--ink); background: var(--crt); border: 2px solid var(--rule); padding: 2px 4px; text-align: right; }
+#valTable input:focus-visible { outline: 2px dashed var(--gold); outline-offset: 1px; }
+#optMsg { min-height: 1.3em; }
+button[aria-pressed="false"] { color: var(--dim); }
+
+.overlay { position: fixed; inset: 0; background: color-mix(in srgb, #0c0a22 78%, transparent); display: grid; place-items: center;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); z-index: 10; }
+.card { background: var(--panel); border: 3px solid var(--switch); box-shadow: 6px 6px 0 #0c0a22; padding: 18px 20px; width: min(460px, 100%); display: grid; gap: 14px; }
+.card h2 { font-family: var(--font-display); font-size: 14px; margin: 0; color: var(--gold); line-height: 1.5; text-wrap: balance; }
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 4px 6px; text-align: right; }
+th:first-child, td:first-child { text-align: left; color: var(--dim); }
+thead th { font-family: var(--font-display); font-size: 9px; }
+thead th.c1 { color: var(--p1); } thead th.c2 { color: var(--p2); }
+tr.sum td { border-top: 2px solid var(--rule); color: var(--ink); }
+.card .verdict { font-size: 22px; }
+</style>
+
+<div class="cab">
+  <header>
+    <h1>SWITCHBOX</h1>
+    <span class="credit">after Todd Heimarck, COMPUTE! March 1986</span>
+  </header>
+
+  <section class="table" aria-label="Game">
+    <div class="player p1" id="pl0">
+      <span class="name">PLAYER 1</span>
+      <div class="box"><span class="pts" id="pts0">0</span><span class="sub">this round</span></div>
+      <span class="total">Game total <b id="tot0">0</b></span>
+      <span class="total" id="pass0">Passes left <b id="passn0">3</b></span>
+      <span class="tag" id="tag0" hidden>LAST CHANCE</span>
+    </div>
+    <div class="screen">
+      <div class="roundbar"><span id="rlabel">ROUND 1/4</span><span id="rname">EQUALITY</span><span>GOAL <b id="goal">10</b></span></div>
+      <canvas id="board" width="560" height="444" tabindex="0" aria-label="Switchbox board. Press 1 to 8 to drop a ball into that column."></canvas>
+    </div>
+    <div class="player p2" id="pl1">
+      <span class="name" id="name1">PLAYER 2</span>
+      <div class="box"><span class="pts" id="pts1">0</span><span class="sub">this round</span></div>
+      <span class="total">Game total <b id="tot1">0</b></span>
+      <span class="total" id="pass1">Passes left <b id="passn1">3</b></span>
+      <span class="tag" id="tag1" hidden>LAST CHANCE</span>
+    </div>
+  </section>
+
+  <div class="controls">
+    <div class="status" id="status" aria-live="polite"></div>
+    <div class="btns">
+      <label class="opp-pick"><span>Opponent</span>
+        <select id="opp">
+          <option value="human">Two players</option>
+          <option value="easy">Computer · Easy</option>
+          <option value="medium">Computer · Medium</option>
+          <option value="hard">Computer · Hard</option>
+        </select>
+      </label>
+      <button id="btnPass" type="button">Pass <kbd>−</kbd></button>
+      <button id="btnRandom" type="button">Random <kbd>+</kbd></button>
+      <button id="btnSound" type="button" aria-pressed="true">Sound on</button>
+      <button id="btnNew" type="button">New game</button>
+    </div>
+  </div>
+
+  <details id="optionsPanel">
+    <summary>OPTIONS</summary>
+    <div class="opts">
+      <label class="check"><input type="checkbox" id="optPass"> <span><b>Pass limit.</b> Three passes per half (rounds 1–2, rounds 3–4). No passing twice in a row, and after one player passes the other must play.</span></label>
+      <label class="check"><input type="checkbox" id="optLow"> <span><b>Lowball.</b> The lower total wins, so you try to force your opponent into chain reactions.</span></label>
+      <div class="vals">
+        <span class="label">GOALS AND EXIT VALUES</span>
+        <p class="note">Exit values mirror left and right, so set them from the centre out to the edge. Negative values are allowed.</p>
+        <div class="tbl"><table id="valTable"></table></div>
+      </div>
+      <div class="btns">
+        <button type="button" id="presetOrig">Original values</button>
+        <button type="button" id="presetDouble">Double goals</button>
+        <button type="button" id="optApply">Apply and start new game</button>
+      </div>
+      <span class="note" id="optMsg" aria-live="polite">Changes here take effect when you apply them, which starts a new game.</span>
+    </div>
+  </details>
+
+  <details>
+    <summary>HOW TO PLAY</summary>
+    <ul>
+      <li>Take turns dropping a ball into one of the 8 columns. Tap a column or press 1–8. Pick an opponent to play a friend on this screen or the computer.</li>
+      <li>Each switch has two sides: a thick slope that holds a ball and a flat bar that lets one through. A ball that lands on an empty slope stops there and your turn ends.</li>
+      <li>A ball that hits the flat bar flips the switch and keeps falling.</li>
+      <li>A ball that hits a loaded switch from either side knocks the resting ball loose, and both fall to the next level. One ball in, two balls out: that's how chain reactions build.</li>
+      <li>You score every ball that reaches an exit during your turn. Exits further from the middle are worth more in rounds 2–4.</li>
+      <li>Once a player reaches the round's goal, the other player gets one last turn. Reaching the goal earns it again as a bonus, and the round's winner takes the point difference from the loser.</li>
+      <li>The board carries over between rounds, so a quiet round is a chance to load it up for the next one.</li>
+      <li>Press Pass (or −) to skip a turn when you don't like the board. With the pass limit on, you get three per half and can't pass twice in a row.</li>
+      <li>Lowball (in Options) flips the goal: the lower total wins.</li>
+    </ul>
+  </details>
+</div>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="card" role="dialog" aria-modal="true" aria-labelledby="ovTitle">
+    <h2 id="ovTitle">ROUND 1 OVER</h2>
+    <div class="tbl"><table id="ovTable"></table></div>
+    <div class="verdict" id="ovVerdict"></div>
+    <button id="ovBtn" type="button">Next round</button>
+  </div>
+</div>
+
+<script id="engine">
+/* ---------- Pure game engine (no DOM) ---------- */
+const Engine = (() => {
+  const LEVELS = [4, 5, 6, 7, 8];            // switches per level, top to bottom
+  const ENTRY_X = [0,1,2,3,4,5,6,7].map(k => k - 0.5); // 8 entry paths
+  // Switch i on level L sits at x = 2i - L; its two paths are x ± 0.5.
+  // A switch's left output feeds the right input of the switch below-left, and so on.
+
+  function newBoard(rng = Math.random) {
+    return LEVELS.map(n => Array.from({ length: n }, () => ({ lean: rng() < 0.5 ? 'L' : 'R', ball: false })));
+  }
+  function cloneBoard(b) { return b.map(r => r.map(s => ({ lean: s.lean, ball: s.ball }))); }
+  function center(L, i) { return 2 * i - L; }
+  function locate(L, x) {
+    let c = x - 0.5;
+    if (((c + L) % 2 + 2) % 2 !== 0) c = x + 0.5;
+    return { c, i: (c + L) / 2, side: x < c ? 'L' : 'R' };
+  }
+  // lean 'L' = platform on the left, trigger on the right.
+  function platformX(c, lean) { return lean === 'L' ? c - 0.5 : c + 0.5; }
+
+  // Drop a ball down entry column col (0-7). Returns the new board, the
+  // tick-by-tick motion for animation, and the exit indices (0-15) reached.
+  function simulate(board, col, fast = false) {
+    const b = cloneBoard(board);
+    const ticks = [];
+    let nextId = 1;
+    let moving = [{ id: 0, x0: ENTRY_X[col], x: ENTRY_X[col] }];
+    for (let L = 0; L < LEVELS.length && moving.length; L++) {
+      const segs = moving.map(m => ({ id: m.id, x0: m.x0, x1: m.x, l0: L - 1, l1: L }));
+      const order = [...moving].sort((a, b2) => a.x - b2.x || a.id - b2.id);
+      const next = [];
+      const events = [];
+      for (const m of order) {
+        const { c, i, side } = locate(L, m.x);
+        const s = b[L][i];
+        if (!s.ball) {
+          if (side === s.lean) {                 // empty platform: the ball stops
+            s.ball = true;
+            events.push({ type: 'rest', L, i });
+          } else {                               // trigger: flip and keep falling
+            s.lean = s.lean === 'L' ? 'R' : 'L';
+            next.push({ id: m.id, x0: m.x, x: m.x });
+            events.push({ type: 'flip', L, i });
+          }
+        } else {                                 // loaded switch: both balls fall
+          s.ball = false;
+          const px = platformX(c, s.lean);
+          const tx = px === c - 0.5 ? c + 0.5 : c - 0.5;
+          const rid = nextId++;
+          if (side === s.lean) {                 // onto the full platform: one slides over to the trigger
+            next.push({ id: m.id, x0: m.x, x: tx });
+            next.push({ id: rid, x0: px, x: px });
+          } else {
+            next.push({ id: m.id, x0: m.x, x: m.x });
+            next.push({ id: rid, x0: px, x: px });
+          }
+          events.push({ type: 'release', L, i });
+        }
+      }
+      if (!fast) ticks.push({ segs, board: cloneBoard(b), events });
+      moving = next;
+    }
+    const exits = moving.map(m => m.x + 4.5);
+    if (moving.length && !fast) {
+      ticks.push({ segs: moving.map(m => ({ id: m.id, x0: m.x0, x1: m.x, l0: LEVELS.length - 1, l1: LEVELS.length })), board: cloneBoard(b), events: [], exits });
+    }
+    return { board: b, ticks, exits, released: nextId - 1 };
+  }
+
+  function mirror(half) { return [...half].reverse().concat(half); } // half: centre -> edge
+  const ROUNDS = [
+    { name: 'EQUALITY',  goal: 10,  vals: mirror([2,2,2,2,2,2,2,2]) },
+    { name: 'FIBONACCI', goal: 40,  vals: mirror([1,2,3,5,8,13,21,34]) },
+    { name: 'COUNTING',  goal: 20,  vals: mirror([1,2,3,4,5,6,7,8]) },
+    { name: 'SQUARES',   goal: 80,  vals: mirror([1,4,9,16,25,36,49,64]) }, // goal 80 read off a round 4 screenshot
+  ];
+
+  function score(exits, vals) { return exits.reduce((s, e) => s + vals[e], 0); }
+
+  // End-of-round settlement per the article: goal bonus, then the
+  // winner takes the point difference from the loser.
+  function settle(rs, goal) {
+    return [0, 1].map(p => {
+      const bonus = rs[p] >= goal ? goal : 0;
+      const diff = rs[p] - rs[1 - p];
+      return { points: rs[p], bonus, diff, total: rs[p] + bonus + diff };
+    });
+  }
+
+  /* ---------- Computer opponent ----------
+     A search state is { board, rs:[p1,p2] round points, turn, lc (who has the
+     last-chance turn, or null), done }. Positions are judged the way the round
+     will be settled: point difference counts three times (it is scored once,
+     then added to the winner and taken from the loser) plus the goal bonus. */
+  function applyMove(st, col, vals, goal) {
+    let board = st.board, pts = 0;
+    if (col >= 0) { const r = simulate(board, col, true); board = r.board; pts = score(r.exits, vals); }
+    const p = st.turn, rs = st.rs.slice();
+    rs[p] += pts;
+    let lc = st.lc, done = false;
+    if (lc === p) done = true;
+    else if (lc === null && rs[p] >= goal) lc = 1 - p;
+    return { board, rs, turn: 1 - p, lc, done, pts };
+  }
+  // In lowball the same settlement applies but the lowest total wins, so the
+  // value is simply turned around.
+  function evaluate(st, me, goal, low = false) {
+    const o = 1 - me, bonus = x => st.rs[x] >= goal ? goal : 0;
+    const v = 3 * (st.rs[me] - st.rs[o]) + bonus(me) - bonus(o);
+    return low ? -v : v;
+  }
+  // Value of a position for the player about to move, searching `depth` plies.
+  function negamax(st, depth, vals, goal, low = false) {
+    if (st.done || depth === 0) return evaluate(st, st.turn, goal, low);
+    let best = -Infinity;
+    for (let c = 0; c < 8; c++) best = Math.max(best, -negamax(applyMove(st, c, vals, goal), depth - 1, vals, goal, low));
+    return best;
+  }
+  // depth: how far ahead it looks. slip: how often it settles for its second-best move.
+  const LEVELS_AI = { easy: { depth: 0 }, medium: { depth: 1, slip: 0 }, hard: { depth: 3, slip: 0.3 } };
+  // Returns a column 0-7, or -1 to pass.
+  function chooseMove(st, level, vals, goal, rng = Math.random, mayPass = false, low = false) {
+    const L = LEVELS_AI[level] || LEVELS_AI.medium;
+    if (L.depth === 0) return Math.floor(rng() * 8);   // the 1986 solitaire rules: the computer plays at random
+    const scored = [];
+    for (let c = 0; c < 8; c++) scored.push([c, -negamax(applyMove(st, c, vals, goal), L.depth - 1, vals, goal, low)]);
+    const values = [...new Set(scored.map(([, v]) => Math.round(v * 1000) / 1000))].sort((a, b) => b - a);
+    let pickValue = values[0];
+    if (values.length > 1 && rng() < L.slip) pickValue = values[1];
+    const picks = scored.filter(([, v]) => Math.round(v * 1000) / 1000 === pickValue).map(([c]) => c);
+    if (mayPass && L.depth >= 3 && !st.done && pickValue === values[0]) {
+      const vp = -negamax(applyMove(st, -1, vals, goal), L.depth - 1, vals, goal, low);
+      if (vp > values[0] + 0.5) return -1;            // pass only when every drop hands the opponent something
+    }
+    return picks[Math.floor(rng() * picks.length)];
+  }
+
+  return { LEVELS, ENTRY_X, newBoard, cloneBoard, center, locate, platformX, simulate, ROUNDS, score, settle,
+    applyMove, evaluate, negamax, chooseMove };
+})();
+</script>
+
+<script>
+/* ---------- Rendering ---------- */
+// Board styled after the 1986 screens: stepped walls (straight beside each
+// row of switches, sloped between rows), a solid lane under every path,
+// a numbered entry bar, and exit values stacked tens-over-units.
+const css = getComputedStyle(document.documentElement);
+const C = name => css.getPropertyValue(name).trim();
+const COL = { field: C('--field'), wall: C('--wall'), lane: C('--lane'), sw: C('--sw'), hi: C('--sw-hi'),
+  ballc: C('--ball'), barText: C('--sw'), p: [C('--p1'), C('--p2')], glow: 'rgba(255,255,255,.55)' };
+
+const cv = document.getElementById('board');
+const ctx = cv.getContext('2d');
+// The canvas has 2x2 device pixels per board pixel: most drawing uses board
+// pixels, while switches and balls use the finer grid for cleaner shapes.
+const RES = 2;
+ctx.setTransform(RES, 0, 0, RES, 0, 0);
+const W = cv.width / RES, H = cv.height / RES;
+function fine(draw) { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); draw(); ctx.restore(); }
+const S = 16;                                   // pixels between neighbouring paths
+const px = x => Math.round(W / 2 + (x - 3) * S); // board centre is x = 3
+const BAR_TOP = 3, BAR_BOT = 21;                // entry bar
+const ROW0 = 50, ROW = 30;                      // y of each switch row
+const rowY = L => ROW0 + ROW * L;
+const WALL_UP = 15, WALL_DOWN = 8;              // straight wall span around a row
+const TRAY = 186;                               // bottom of the lanes
+const ly = l => l < 0 ? BAR_BOT + 7 : l >= 5 ? TRAY - 7 : rowY(l) - 10; // ball y at each level (matches a resting ball)
+
+const FONT = {
+  '0':['111','101','101','101','111'],'1':['010','110','010','010','111'],'2':['111','001','111','100','111'],
+  '3':['111','001','111','001','111'],'4':['101','101','111','001','001'],'5':['111','100','111','001','111'],
+  '6':['111','100','111','101','111'],'7':['111','001','010','010','010'],'8':['111','101','111','101','111'],
+  '9':['111','101','111','001','111'],'+':['000','010','111','010','000'],'-':['000','000','111','000','000'],
+};
+function tinyText(str, cx, y, color, scale = 1) {
+  const w = str.length * 4 - 1;
+  let x = Math.round(cx - (w * scale) / 2);
+  ctx.fillStyle = color;
+  for (const ch of str) {
+    const g = FONT[ch];
+    if (g) for (let r = 0; r < 5; r++) for (let c = 0; c < 3; c++) if (g[r][c] === '1') ctx.fillRect(x + c * scale, y + r * scale, scale, scale);
+    x += 4 * scale;
+  }
+}
+function line(x0, y0, x1, y1, color, thick = 2) {
+  ctx.fillStyle = color;
+  const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+  let err = dx + dy;
+  for (;;) {
+    ctx.fillRect(x0, y0, thick, thick);
+    if (x0 === x1 && y0 === y1) break;
+    const e2 = 2 * err;
+    if (e2 >= dy) { err += dy; x0 += sx; }
+    if (e2 <= dx) { err += dx; y0 += sy; }
+  }
+}
+function disk(cx, cy, d, color) {               // cx, cy, d in fine pixels
+  ctx.fillStyle = color;
+  for (let r = 0; r < d; r++) {
+    const dy = r + 0.5 - d / 2;
+    const w = 2 * Math.round(Math.sqrt(Math.max(0, (d / 2) ** 2 - dy * dy)));
+    ctx.fillRect(Math.round(cx - w / 2), Math.round(cy - d / 2) + r, w, 1);
+  }
+}
+// The switch, drawn pixel for pixel by hand (leaning left, with a ball on it).
+// Column 16 is the pivot line; columns 0 and 32 are the channel walls.
+// S = switch, B = resting ball. Leaning right is the mirror image.
+const SWITCH_ART = [
+  '......BBBBB......................',
+  '....BBBBBBBBB....................',
+  '...BBBBBBBBBBB...................',
+  '...BBBBBBBBBBB...................',
+  '...BBBBBBBBBBB...................',
+  '...BBBBBBBBBBB...................',
+  '...BBBBBBBBBBB...................',
+  '...BBBBBBBBBBB...................',
+  '...BBBBBBBBBBB...................',
+  '....BBBBBBBBB....................',
+  '......BBBBB......................',
+  '...SSSSSSSSSS....................',
+  '...SSSSSSSSSS....................',
+  '....SSSSSSSSSS...................',
+  '....SSSSSSSSSS...................',
+  '.....SSSSSSSSSS..................',
+  '.....SSSSSSSSSS..................',
+  '......SSSSSSSSSS.................',
+  '......SSSSSSSSSS.................',
+  '.......SSSSSSSSSSSSSSSSSSSSSSS...',
+  '.......SSSSSSSSSSSSSSSSSSSSSSS...',
+];
+const ART_PIVOT = 16, ART_W = SWITCH_ART[0].length;
+const ART_TOP = -15;                             // art row 0, relative to a switch row's y
+const PLANK = [], BALL_PX = [];
+SWITCH_ART.forEach((row, y) => [...row].forEach((ch, x) => {
+  if (ch === 'S' || ch === 'O') PLANK.push([x, y, ch]);
+}));
+// Ball shape as offsets from its centre pixel (art columns 3-13, rows 0-10 -> 8, 5).
+// 11 pixels wide, it sits exactly in the middle of a 15-pixel channel either side of a pivot.
+SWITCH_ART.forEach((row, y) => [...row].forEach((ch, x) => { if (ch === 'B') BALL_PX.push([x - 8, y - 5]); }));
+const BALL_SET = new Set(BALL_PX.map(([dx, dy]) => dx + ',' + dy));
+const BALL_EDGE = BALL_PX.filter(([dx, dy]) => [[1,0],[-1,0],[0,1],[0,-1]].some(([a, b]) => !BALL_SET.has((dx + a) + ',' + (dy + b))));
+const BALL_R = 5;
+
+// x, y = ball centre in board pixels. Falling balls get the player's colour
+// with a dark rim; resting balls are solid dark, as on the original screen.
+function ball(x, y, fill, moving) {
+  const X = Math.round(x), Y = Math.round(y);
+  ctx.fillStyle = moving ? fill : COL.ballc;
+  for (const [dx, dy] of BALL_PX) ctx.fillRect(X + dx, Y + dy, 1, 1);
+  if (moving) { ctx.fillStyle = COL.ballc; for (const [dx, dy] of BALL_EDGE) ctx.fillRect(X + dx, Y + dy, 1, 1); }
+  ctx.fillStyle = 'rgba(255,255,255,.75)';
+  ctx.fillRect(X - 2, Y - 3, 2, 1); ctx.fillRect(X - 3, Y - 2, 1, 1);
+}
+
+// cx = the pivot line's x, y = the switch row's y.
+function drawSwitch(cx, y, lean, flash) {
+  const x0 = cx - ART_PIVOT, y0 = y + ART_TOP;
+  ctx.fillStyle = flash ? COL.hi : COL.sw;
+  for (const [x, yy, ch] of PLANK) {
+    if (ch !== 'S') continue;
+    ctx.fillRect(x0 + (lean === 'L' ? x : 2 * ART_PIVOT - x), y0 + yy, 1, 1);
+  }
+  ctx.fillStyle = COL.wall;
+  for (const [x, yy, ch] of PLANK) if (ch === 'O') ctx.fillRect(x0 + (lean === 'L' ? x : 2 * ART_PIVOT - x), y0 + yy, 1, 1);
+}
+// Where a resting ball sits: exactly where it is in the art (mirrored for a right lean).
+function restPos(c, lean, y) {
+  return [px(c) + (lean === 'L' ? -8 : 8), y + ART_TOP + 5];
+}
+
+// Wall outline for one side (sign -1 left, +1 right) as a list of points.
+function wallPoints(sign) {
+  const xAt = L => sign < 0 ? -L - 1 : L + 7;  // half a path outside the outermost lane
+  const pts = [[px(xAt(0)), BAR_BOT]];
+  for (let L = 0; L < 5; L++) {
+    pts.push([px(xAt(L)), rowY(L) + WALL_DOWN]);
+    if (L < 4) pts.push([px(xAt(L + 1)), rowY(L + 1) - WALL_UP]);
+  }
+  pts.push([px(xAt(4)), TRAY + 4]);
+  return pts;
+}
+
+function drawFrame() {
+  ctx.fillStyle = COL.field; ctx.fillRect(0, 0, W, H);
+  // lanes: every path gets a line from where it enters down to the tray
+  ctx.fillStyle = COL.lane;
+  for (let x = -4; x <= 10; x++) {                 // lines run between paths, so balls fall in channels
+    const first = Math.max(0, -x, x - 6);         // level where this line first appears inside the walls
+    const top = first === 0 ? BAR_BOT : rowY(first) - WALL_UP;
+    ctx.fillRect(px(x), top, 1, TRAY - 5 - top);
+  }
+  // walls
+  for (const sign of [-1, 1]) {
+    const pts = wallPoints(sign);
+    const off = sign < 0 ? -2 : 0;
+    for (let i = 0; i < pts.length - 1; i++) line(pts[i][0] + off, pts[i][1], pts[i + 1][0] + off, pts[i + 1][1], COL.wall, 3);
+  }
+}
+
+function drawEntries(hoverCol, active) {
+  // the bar across the top, with a numbered slot over each entry path
+  const x0 = px(-1) - 2, x1 = px(7) + 3;
+  ctx.fillStyle = COL.wall;
+  ctx.fillRect(x0, BAR_TOP, x1 - x0, BAR_BOT - BAR_TOP);
+  for (let k = 0; k < 8; k++) {
+    const x = px(Engine.ENTRY_X[k]);
+    const on = k === hoverCol && active;
+    if (on) { ctx.fillStyle = COL.p[game.turn]; ctx.fillRect(x - 7, BAR_TOP + 2, 15, BAR_BOT - BAR_TOP - 4); }
+    tinyText(String(k + 1), x + 1, BAR_TOP + 4, on ? COL.wall : COL.barText, 2);
+    if (on) ball(x, ly(-1), COL.p[game.turn], true);
+  }
+  ctx.fillStyle = COL.lane;
+  for (let k = 0; k <= 8; k++) ctx.fillRect(px(k - 1), BAR_TOP + 2, 1, BAR_BOT - BAR_TOP - 4);
+
+  // goal on one side of the bar, an arrow toward the player whose turn it is on the other
+  const goal = String(Engine.ROUNDS[game.round].goal);
+  const leftX = (px(-5) + x0) / 2, rightX = (x1 + px(11)) / 2;
+  const goalX = game.turn === 0 ? rightX : leftX;
+  tinyText(goal, goalX, BAR_TOP + 4, COL.wall, 2);
+  if (!game.over) {
+    const ax = game.turn === 0 ? leftX : rightX, ay = BAR_TOP + 9, d = game.turn === 0 ? -1 : 1;
+    ctx.fillStyle = COL.wall;
+    ctx.fillRect(Math.round(ax - 9), ay - 1, 18, 3);
+    for (let k = 0; k < 6; k++) ctx.fillRect(Math.round(ax + d * (9 - k)) - (d > 0 ? 1 : 0), ay - k, 2, 2 * k + 1);
+  }
+}
+
+function drawBoard(b, flashes) {
+  for (let L = 0; L < 5; L++) {
+    for (let i = 0; i < b[L].length; i++) {
+      const s = b[L][i];
+      const c = Engine.center(L, i);
+      drawSwitch(px(c), rowY(L), s.lean, flashes && flashes.has(L + ':' + i));
+      if (s.ball) { const [bx, by] = restPos(c, s.lean, rowY(L)); ball(bx, by, COL.ballc, false); }
+    }
+  }
+}
+
+function drawExits(vals, lit) {
+  for (let e = 0; e < 16; e++) {
+    const x = px(e - 4.5);
+    if (lit && lit[e]) {
+      ctx.fillStyle = 'rgba(255,255,255,' + (0.6 * lit[e]).toFixed(2) + ')';
+      ctx.fillRect(x - 7, TRAY - 14, 15, 14);
+    }
+  }
+  // posts between the exits, and the floor
+  ctx.fillStyle = COL.wall;
+  for (let k = 0; k <= 16; k++) ctx.fillRect(px(k - 5) - 1, TRAY - 5, 3, 7);
+  ctx.fillRect(px(-5) - 2, TRAY + 1, px(11) - px(-5) + 5, 3);
+  // values, tens above units like the original
+  for (let e = 0; e < 16; e++) {
+    const v = vals[e], x = px(e - 4.5) + 1;
+    const neg = v < 0, a = Math.abs(v);
+    if (a >= 10 && neg) tinyText('-' + Math.floor(a / 10), x, TRAY + 11, COL.wall, 1);
+    else if (a >= 10 || neg) tinyText(neg ? '-' : String(Math.floor(a / 10)), x, TRAY + 8, COL.wall, 2);
+    tinyText(String(a % 10), x, TRAY + 20, COL.wall, 2);
+  }
+}
+
+/* ---------- Game state ---------- */
+let game = null;
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+let TICK_MS = reduceMotion ? 60 : 170;
+
+
+let anim = null;      // { sim, start, from, dropper, col }
+let hoverCol = -1;
+const popups = [];
+let exitGlow = new Array(16).fill(0);
+
+function render() {
+  requestAnimationFrame(render);           // schedule first so one bad frame can't stop the loop
+  try { drawScene(performance.now()); }
+  catch (err) {
+    console.error(err);
+    if (anim) { try { finishTurn(); } catch (e2) { anim = null; console.error(e2); } }
+  }
+}
+
+function drawScene(now) {
+  drawFrame();
+  const r = Engine.ROUNDS[game.round];
+  if (anim) {
+    const elapsed = Math.max(0, now - anim.start);
+    const k = Math.min(Math.floor(elapsed / TICK_MS), anim.sim.ticks.length);
+    if (k >= anim.sim.ticks.length) {
+      finishTurn();
+    } else {
+      if (k !== anim.lastK) { if (k > 0) Sound.tick(anim.sim.ticks[k - 1].events); anim.lastK = k; }
+      const tick = anim.sim.ticks[k];
+      const before = k === 0 ? anim.from : anim.sim.ticks[k - 1].board;
+      const flashes = new Set();
+      if (k > 0) for (const ev of anim.sim.ticks[k - 1].events) if (ev.type !== 'rest') flashes.add(ev.L + ':' + ev.i);
+      drawBoard(before, flashes);
+      let t = (elapsed - k * TICK_MS) / TICK_MS;
+      const ty = Math.pow(t, 1.5);
+      for (const s of tick.segs) {
+        const x = px(s.x0 + (s.x1 - s.x0) * Math.min(1, t * 1.6));
+        const y = Math.round(ly(s.l0) + (ly(s.l1) - ly(s.l0)) * ty);
+        ball(x, y, COL.p[anim.dropper], true);
+      }
+    }
+  }
+  if (!anim) drawBoard(game.board, null);
+  for (let e = 0; e < 16; e++) exitGlow[e] = Math.max(0, exitGlow[e] - 0.02);
+  drawExits(r.vals, exitGlow);
+  drawEntries(hoverCol, canAct());
+  for (let i = popups.length - 1; i >= 0; i--) {
+    const p = popups[i];
+    const age = (now - p.born) / 900;
+    if (age >= 1) { popups.splice(i, 1); continue; }
+    tinyText((p.v >= 0 ? '+' : '') + p.v, p.x, Math.round(p.y - age * 12), p.color);
+  }
+}
+
+/* ---------- Sound (chiptune blips, generated live) ---------- */
+const Sound = (() => {
+  let ac = null, on = true;
+  function ensure() {
+    if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
+    if (ac.state === 'suspended') ac.resume().catch(() => {});
+    return ac;
+  }
+  function beep(freq, dur = 0.06, type = 'square', vol = 0.05, when = 0, slide = 0) {
+    if (!on) return;
+    const a = ensure(); if (!a) return;
+    const t = a.currentTime + when;
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.linearRampToValueAtTime(Math.max(40, freq + slide), t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(a.destination); o.start(t); o.stop(t + dur + 0.02);
+  }
+  return {
+    get on() { return on; }, set on(v) { on = !!v; },
+    unlock() { if (on) ensure(); },
+    drop() { beep(660, 0.05, 'square', 0.04, 0, -220); },
+    tick(events) {
+      events.slice(0, 4).forEach((ev, i) => {
+        if (ev.type === 'flip') beep(1250, 0.025, 'square', 0.025, i * 0.015);
+        else if (ev.type === 'release') beep(520, 0.06, 'triangle', 0.07, i * 0.015, 200);
+        else if (ev.type === 'rest') beep(170, 0.08, 'triangle', 0.09, i * 0.015, -50);
+      });
+    },
+    score(exits, vals) {
+      exits.slice(0, 12).forEach((e, i) => {
+        const v = vals[e];
+        beep(v < 0 ? 200 : 440 + Math.min(Math.abs(v), 64) * 12, 0.07, 'square', 0.04, i * 0.06);
+      });
+      if (exits.length >= 4) [523, 659, 784, 1047].forEach((f, i) => beep(f, 0.09, 'square', 0.045, Math.min(exits.length, 12) * 0.06 + i * 0.08));
+    },
+    pass() { beep(300, 0.09, 'triangle', 0.05, 0, -90); },
+    round() { [392, 523, 659, 784].forEach((f, i) => beep(f, 0.12, 'triangle', 0.06, i * 0.1)); },
+  };
+})();
+
+/* ---------- Settings ---------- */
+const $ = id => document.getElementById(id);
+const overlay = $('overlay');
+const OPP_LABEL = { human: 'Two players', easy: 'Computer · Easy', medium: 'Computer · Medium', hard: 'Computer · Hard' };
+const PASSES_PER_HALF = 3;
+const TURN_CAP = 120;              // a round ends here regardless, so custom values can't make it run forever
+const ORIGINAL = Engine.ROUNDS.map(r => ({ goal: r.goal, half: r.vals.slice(8) }));   // centre -> edge
+const mirrorHalf = half => [...half].reverse().concat(half);
+
+function defaultSettings() {
+  return { opp: 'human', sound: true, passLimit: true, lowball: false, rounds: ORIGINAL.map(r => ({ goal: r.goal, half: r.half.slice() })) };
+}
+function loadSettings() {
+  const d = defaultSettings();
+  try {
+    const v = JSON.parse(localStorage.getItem('switchbox-settings') || 'null');
+    if (v && typeof v === 'object') {
+      if (OPP_LABEL[v.opp]) d.opp = v.opp;
+      for (const k of ['sound', 'passLimit', 'lowball']) if (typeof v[k] === 'boolean') d[k] = v[k];
+      if (Array.isArray(v.rounds) && v.rounds.length === 4 && v.rounds.every(r => r && Number.isInteger(r.goal) && Array.isArray(r.half) && r.half.length === 8)) d.rounds = v.rounds;
+    } else {
+      const old = localStorage.getItem('switchbox-opp'); if (OPP_LABEL[old]) d.opp = old;
+    }
+  } catch (e) {}
+  return d;
+}
+function saveSettings() { try { localStorage.setItem('switchbox-settings', JSON.stringify(settings)); } catch (e) {} }
+let settings = loadSettings();
+Sound.on = settings.sound;
+
+// A game keeps its own copy of the rules it started with.
+function cfgFromSettings() { return { passLimit: settings.passLimit, lowball: settings.lowball, rounds: settings.rounds.map(r => ({ goal: r.goal, half: r.half.slice() })) }; }
+function applyRounds(rounds) {
+  rounds.forEach((r, i) => { Engine.ROUNDS[i].goal = r.goal; Engine.ROUNDS[i].vals = mirrorHalf(r.half); });
+}
+
+/* ---------- Turn flow ---------- */
+let aiTimer = null;
+let AI_DELAY_MS = reduceMotion ? 250 : 700;   // a beat so you can see the computer move
+
+const isComputer = p => p === 1 && game.opp !== 'human';
+const nameOf = p => isComputer(p) ? 'Computer' : 'Player ' + (p + 1);
+const who = p => `<span class="who${p + 1}">${nameOf(p)}</span>`;
+
+// The game can take a move (from anyone) right now.
+function idle() { return !anim && !game.over && !game.settling && overlay.hidden; }
+// A person at the screen can take a move right now.
+function canAct() { return idle() && !isComputer(game.turn); }
+// Pass rules from the article: three passes per half, never two passes in a
+// row by one player, and after one player passes the other must play.
+function canPass(p) {
+  if (!game.cfg.passLimit) return true;
+  return game.passesLeft[p] > 0 && !game.passed[p] && !game.passed[1 - p];
+}
+
+function startDrop(col) {
+  const sim = Engine.simulate(game.board, col);
+  game.passed[game.turn] = false;
+  anim = { sim, start: performance.now(), from: game.board, dropper: game.turn, col, lastK: 0 };
+  Sound.drop();
+  setStatus(`${who(game.turn)} drops into column ${col + 1}…`);
+  updateUI();
+}
+function drop(col) { if (canAct()) startDrop(col); }
+
+function finishTurn() {
+  const { sim, dropper } = anim;
+  anim = null;
+  game.board = sim.board;
+  const r = Engine.ROUNDS[game.round];
+  const pts = Engine.score(sim.exits, r.vals);
+  const now = performance.now();
+  for (const e of sim.exits) {
+    exitGlow[e] = 1;
+    popups.push({ x: px(e - 4.5) + 1, y: TRAY - 24, v: r.vals[e], color: COL.wall, born: now });
+  }
+  if (sim.exits.length) Sound.score(sim.exits, r.vals);
+  game.rs[dropper] += pts;
+  let msg;
+  if (sim.exits.length === 0) msg = `${who(dropper)}'s ball came to rest. No points.`;
+  else if (sim.exits.length === 1) msg = `${who(dropper)} scores ${pts}.`;
+  else msg = `${who(dropper)} scores ${pts} from ${sim.exits.length} balls!`;
+  endTurn(dropper, msg);
+}
+
+function doPass(p) {
+  game.passed[p] = true;
+  if (game.cfg.passLimit) game.passesLeft[p]--;
+  Sound.pass();
+  endTurn(p, `${who(p)} passes.`);
+}
+function pass() { if (canAct() && canPass(game.turn)) doPass(game.turn); }
+
+function endTurn(p, msg) {
+  const r = Engine.ROUNDS[game.round];
+  game.turnsInRound++;
+  const capped = game.turnsInRound >= TURN_CAP;
+  if (game.lastChanceFor === p || capped) {
+    game.turn = 1 - p;
+    game.settling = true;                    // no drops while the round wraps up
+    setStatus(msg + (capped && game.lastChanceFor !== p ? ` Turn limit reached (${TURN_CAP}). Round over.` : ' Round over.'));
+    updateUI();
+    setTimeout(endRound, 700);
+    return;
+  }
+  if (game.lastChanceFor === null && game.rs[p] >= r.goal) {
+    game.lastChanceFor = 1 - p;
+    msg += ` Goal reached. ${nameOf(1 - p)} gets one last turn.`;
+  }
+  game.turn = 1 - p;
+  setStatus(msg + nextPrompt());
+  updateUI();
+  scheduleComputer();
+}
+
+function nextPrompt() {
+  return isComputer(game.turn) ? ` ${who(game.turn)} is thinking…` : ` ${who(game.turn)}, pick a column.`;
+}
+
+/* ---------- Computer opponent ---------- */
+function scheduleComputer() {
+  clearTimeout(aiTimer);
+  if (!idle() || !isComputer(game.turn)) return;
+  aiTimer = setTimeout(computerMove, AI_DELAY_MS);
+}
+function computerMove() {
+  if (!idle() || !isComputer(game.turn)) return;
+  const r = Engine.ROUNDS[game.round];
+  const st = { board: game.board, rs: game.rs.slice(), turn: game.turn, lc: game.lastChanceFor, done: false };
+  const col = Engine.chooseMove(st, game.opp, r.vals, r.goal, Math.random, canPass(game.turn), game.cfg.lowball);
+  if (col < 0) doPass(game.turn); else startDrop(col);
+}
+
+function endRound() {
+  game.settling = false;
+  const r = Engine.ROUNDS[game.round];
+  const s = Engine.settle(game.rs, r.goal);
+  game.totals[0] += s[0].total; game.totals[1] += s[1].total;
+  const last = game.round === Engine.ROUNDS.length - 1;
+  const low = game.cfg.lowball;
+  $('ovTitle').textContent = `ROUND ${game.round + 1} OVER: ${r.name}`;
+  const row = (label, a, b, cls = '') => `<tr class="${cls}"><td>${label}</td><td>${a}</td><td>${b}</td></tr>`;
+  const sign = v => (v > 0 ? '+' : '') + v;
+  $('ovTable').innerHTML =
+    `<thead><tr><th></th><th class="c1">P1</th><th class="c2">${isComputer(1) ? 'CPU' : 'P2'}</th></tr></thead><tbody>` +
+    row('Round points', s[0].points, s[1].points) +
+    row(`Goal bonus (${r.goal})`, sign(s[0].bonus), sign(s[1].bonus)) +
+    row('Point difference', sign(s[0].diff), sign(s[1].diff)) +
+    row('Round total', s[0].total, s[1].total, 'sum') +
+    row('Game total', game.totals[0], game.totals[1], 'sum') + `</tbody>`;
+  Sound.round();
+  if (last) {
+    game.over = true;
+    const [a, b] = game.totals;
+    const winner = low ? (a < b ? 0 : 1) : (a > b ? 0 : 1);
+    $('ovVerdict').innerHTML = a === b ? 'A tie game.' : `${who(winner)} wins by ${Math.abs(a - b)}${low ? ' with the lower total' : ''}.`;
+    $('ovBtn').textContent = 'Play again';
+  } else {
+    const n = Engine.ROUNDS[game.round + 1];
+    const half = game.round + 1 === 2 && game.cfg.passLimit ? ' Second half: passes reset to 3 each.' : '';
+    $('ovVerdict').textContent = `Next: ${n.name}, goal ${n.goal}. The board carries over.${low ? ' Lowball: the lower total wins.' : ''}${half}`;
+    $('ovBtn').textContent = 'Next round';
+  }
+  overlay.hidden = false;
+  $('ovBtn').focus();
+  updateUI();
+}
+
+$('ovBtn').addEventListener('click', () => {
+  overlay.hidden = true;
+  if (game.over) { newGame(); return; }
+  game.round++;
+  game.rs = [0, 0];
+  game.lastChanceFor = null;
+  game.turnsInRound = 0;
+  if (game.round === 2) { game.passesLeft = [PASSES_PER_HALF, PASSES_PER_HALF]; game.passed = [false, false]; }
+  setStatus(`Round ${game.round + 1}: ${Engine.ROUNDS[game.round].name}.` + nextPrompt());
+  updateUI();
+  cv.focus();
+  scheduleComputer();
+});
+
+function freshGame() {
+  return { board: Engine.newBoard(), round: 0, rs: [0, 0], totals: [0, 0], turn: 0, lastChanceFor: null,
+    over: false, settling: false, passed: [false, false], passesLeft: [PASSES_PER_HALF, PASSES_PER_HALF],
+    turnsInRound: 0, opp: settings.opp, cfg: cfgFromSettings(), log: '' };
+}
+function newGame() {
+  clearTimeout(aiTimer);
+  anim = null;
+  game = freshGame();
+  applyRounds(game.cfg.rounds);
+  overlay.hidden = true;
+  setStatus((game.cfg.lowball ? 'Lowball game: the lower total wins. ' : '') +
+    'Switches start in random positions and the board is empty, so half the columns are blocked.' + nextPrompt());
+  updateUI();
+  scheduleComputer();
+}
+
+function setStatus(html) { game.log = html; $('status').innerHTML = html; }
+
+function updateUI() {
+  const r = Engine.ROUNDS[game.round];
+  for (const p of [0, 1]) {
+    $('pts' + p).textContent = game.rs[p];
+    $('tot' + p).textContent = game.totals[p];
+    $('pl' + p).classList.toggle('active', game.turn === p && !game.over);
+    $('tag' + p).hidden = game.lastChanceFor !== p;
+    $('pass' + p).hidden = !game.cfg.passLimit;
+    $('passn' + p).textContent = game.passesLeft[p];
+  }
+  $('name1').textContent = isComputer(1) ? 'COMPUTER · ' + game.opp.toUpperCase() : 'PLAYER 2';
+  $('rlabel').textContent = `ROUND ${game.round + 1}/4`;
+  $('rname').textContent = r.name + (game.cfg.lowball ? ' · LOWBALL' : '');
+  $('goal').textContent = r.goal;
+  $('opp').value = game.opp;
+  const busy = !canAct();
+  $('btnPass').disabled = busy || !canPass(game.turn);
+  $('btnRandom').disabled = busy;
+  $('btnSound').setAttribute('aria-pressed', String(Sound.on));
+  $('btnSound').textContent = Sound.on ? 'Sound on' : 'Sound off';
+}
+
+/* ---------- Options panel ---------- */
+function buildValueTable() {
+  const head = '<thead><tr><th>Round</th><th>Goal</th>' + Array.from({ length: 8 }, (_, i) => `<th>${i === 0 ? 'Centre' : i === 7 ? 'Edge' : ''}</th>`).join('') + '</tr></thead>';
+  const body = Engine.ROUNDS.map((R, ri) => `<tr><th scope="row">${ri + 1} ${R.name}</th>` +
+    `<td><input type="number" inputmode="numeric" id="og${ri}" min="1" max="999" step="1" aria-label="Round ${ri + 1} goal"></td>` +
+    Array.from({ length: 8 }, (_, i) => `<td><input type="number" inputmode="numeric" id="ov${ri}_${i}" min="-99" max="99" step="1" aria-label="Round ${ri + 1} exit ${i + 1} from the centre"></td>`).join('') +
+    '</tr>').join('');
+  $('valTable').innerHTML = head + '<tbody>' + body + '</tbody>';
+}
+function fillOptions(src) {
+  $('optPass').checked = src.passLimit;
+  $('optLow').checked = src.lowball;
+  src.rounds.forEach((r, ri) => {
+    $('og' + ri).value = r.goal;
+    r.half.forEach((v, i) => { $(`ov${ri}_${i}`).value = v; });
+  });
+}
+function readOptions() {
+  const rounds = [];
+  for (let ri = 0; ri < 4; ri++) {
+    const goal = Number($('og' + ri).value);
+    if (!Number.isInteger(goal) || goal < 1 || goal > 999) return { error: `Round ${ri + 1} goal must be a whole number from 1 to 999.` };
+    const half = [];
+    for (let i = 0; i < 8; i++) {
+      const v = Number($(`ov${ri}_${i}`).value);
+      if ($(`ov${ri}_${i}`).value.trim() === '' || !Number.isInteger(v) || v < -99 || v > 99) return { error: `Round ${ri + 1}, exit ${i + 1} from the centre must be a whole number from -99 to 99.` };
+      half.push(v);
+    }
+    rounds.push({ goal, half });
+  }
+  return { passLimit: $('optPass').checked, lowball: $('optLow').checked, rounds };
+}
+$('presetOrig').addEventListener('click', () => {
+  const cur = readOptions();
+  fillOptions({ passLimit: cur.error ? settings.passLimit : cur.passLimit, lowball: cur.error ? settings.lowball : cur.lowball, rounds: ORIGINAL });
+  $('optMsg').textContent = 'Original 1986 values filled in. Apply to use them.';
+});
+$('presetDouble').addEventListener('click', () => {
+  for (let ri = 0; ri < 4; ri++) { const g = Number($('og' + ri).value) || ORIGINAL[ri].goal; $('og' + ri).value = Math.min(999, g * 2); }
+  $('optMsg').textContent = 'Goals doubled. Apply to use them.';
+});
+$('optApply').addEventListener('click', () => {
+  const o = readOptions();
+  if (o.error) { $('optMsg').textContent = o.error; return; }
+  Object.assign(settings, o);
+  saveSettings();
+  newGame();
+  $('optMsg').textContent = 'Applied. New game started.';
+  cv.focus();
+});
+
+/* ---------- Input ---------- */
+function colAt(evt) {
+  const rect = cv.getBoundingClientRect();
+  const lx = (evt.clientX - rect.left) * (W / rect.width);
+  const xu = (lx - W / 2) / S + 3;
+  const k = Math.round(xu + 0.5);
+  if (k < 0 || k > 7 || Math.abs(xu - Engine.ENTRY_X[k]) > 0.6) return -1;
+  return k;
+}
+cv.addEventListener('pointermove', e => { hoverCol = colAt(e); });
+cv.addEventListener('pointerleave', () => { hoverCol = -1; });
+cv.addEventListener('click', e => { const k = colAt(e); if (k >= 0) drop(k); });
+document.addEventListener('pointerdown', () => Sound.unlock(), { passive: true });
+document.addEventListener('keydown', e => {
+  Sound.unlock();
+  if (e.target.closest && e.target.closest('input, textarea, select')) return;
+  if (!overlay.hidden && e.key === 'Enter') return;
+  const n = parseInt(e.key, 10);
+  if (n >= 1 && n <= 8) { e.preventDefault(); drop(n - 1); return; }
+  if (e.key === '-' || e.key === '_') { e.preventDefault(); pass(); }
+  if (e.key === '+' || e.key === '=') { e.preventDefault(); drop(Math.floor(Math.random() * 8)); }
+});
+$('btnPass').addEventListener('click', pass);
+$('btnRandom').addEventListener('click', () => drop(Math.floor(Math.random() * 8)));
+$('btnNew').addEventListener('click', newGame);
+$('btnSound').addEventListener('click', () => {
+  Sound.on = !Sound.on; settings.sound = Sound.on; saveSettings();
+  if (Sound.on) { Sound.unlock(); Sound.drop(); }
+  updateUI();
+});
+$('opp').addEventListener('change', e => {
+  game.opp = settings.opp = e.target.value;
+  saveSettings();
+  if (!idle()) { updateUI(); return; }
+  setStatus(`Now playing: ${OPP_LABEL[game.opp]}.` + nextPrompt());
+  updateUI();
+  scheduleComputer();
+});
+
+/* ---------- Boot (keeps a game in progress across page updates) ---------- */
+function start(data) {
+  buildValueTable();
+  fillOptions(settings);
+  if (data && data.game && data.game.board) {
+    game = { passed: [false, false], passesLeft: [PASSES_PER_HALF, PASSES_PER_HALF], turnsInRound: 0,
+      opp: settings.opp, cfg: cfgFromSettings(), ...data.game };
+    applyRounds(game.cfg.rounds);
+    $('status').innerHTML = game.log || '';
+    updateUI();
+    if (game.settling) endRound(); else scheduleComputer();
+  } else {
+    newGame();
+  }
+  requestAnimationFrame(render);
+}
+// Mid-drop, keep the board from before the drop so the turn isn't lost.
+window.claude?.hot?.snapshot?.(() => ({ game: anim ? { ...game, board: anim.from } : game }));
+window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+</script>
