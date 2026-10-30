@@ -29,6 +29,7 @@ index.html                 the whole game: markup, CSS, engine, renderer, UI
 tests/harness.py           Playwright harness (wraps index.html like the artifact host)
 tests/t_suite.py           33 core checks: play, input, full games, phone layout, computer opponent
 tests/t_options.py         25 checks: passes, lowball, custom values, turn limit, sound
+tests/t_players.py         27 checks: player names (later: colors, voice)
 tests/ai_tournament.js     AI-vs-AI games in Node to measure difficulty levels
 tests/screenshot.py        renders a mid-game board to tests/screenshots/
 tools/switch-sketchpad.html  pixel editor the owner used to draw the switch
@@ -50,6 +51,7 @@ Inside `index.html`, in order:
 pip install playwright && python -m playwright install chromium   # once
 python tests/t_suite.py        # expect 33 / 33
 python tests/t_options.py      # expect 25 / 25
+python tests/t_players.py      # expect 27 / 27
 node tests/ai_tournament.js 40 # difficulty check (Hard ~even with Medium, both crush Easy)
 python tests/screenshot.py     # writes tests/screenshots/*.png
 ```
@@ -86,6 +88,11 @@ Artifact rules that matter here:
 - **Computer opponent:** always Player 2. Easy = random (the 1986 solitaire rules).
   Medium = best immediate move. Hard = 3-ply negamax, takes its second-best move 30%
   of the time (owner wanted Hard "doable").
+- **Player names:** renamed by clicking the name in a score box (hover underlines it);
+  no name inputs or note in the Options panel (owner's call, overriding the spec). Apply
+  as typed, shown in capitals, blank falls back to PLAYER 1 / PLAYER 2 / COMPUTER.
+  Stored as `names: [p1, p2Human, p2Computer]`. The computer's box shows
+  `NAME · LEVEL`; only the name part is editable. `nameOf(p)` is the single source.
 - **Options** apply when the owner presses "Apply and start new game"; settings live
   in localStorage key `switchbox-settings`.
 

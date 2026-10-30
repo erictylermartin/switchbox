@@ -66,7 +66,7 @@ def t_lowball(pg):
         pg.wait_for_timeout(10)
     s = pg.evaluate(G); v = pg.inner_text('#ovVerdict')
     a, b = s['totals']
-    expected = 'Player 1' if a < b else 'Computer'
+    expected = pg.evaluate('nameOf(0)') if a < b else pg.evaluate('nameOf(1)')
     check('a lowball game against Hard finishes', s['over'], s)
     check('lowball: the lower total wins', a == b and 'tie' in v or expected in v, (s['totals'], v))
 

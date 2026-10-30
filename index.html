@@ -48,8 +48,15 @@ h1 { font-family: var(--font-display); font-size: clamp(18px, 4vw, 28px); margin
 @media (min-width: 780px) { .table { grid-template-columns: 168px minmax(0,1fr) 168px; grid-template-areas: "p1 screen p2"; } }
 .player { display: grid; gap: 8px; min-width: 0; }
 .player .name { font-family: var(--font-display); font-size: 11px; letter-spacing: 1px; }
-.player.p1 .name { color: var(--p1); }
-.player.p2 .name { color: var(--p2); }
+.player.p1 .name, .player.p1 .lvl { color: var(--p1); }
+.player.p2 .name, .player.p2 .lvl { color: var(--p2); }
+.player .lvl { font-family: var(--font-display); font-size: 11px; letter-spacing: 1px; }
+/* The name label is a button that turns into a text field to rename the player. */
+.player button.name { background: none; border: 0; box-shadow: none; padding: 0; cursor: text; text-align: inherit; text-decoration: underline dotted transparent; text-underline-offset: 4px; transition: text-decoration-color .15s; }
+.player button.name:hover, .player button.name:focus-visible { text-decoration-color: currentColor; }
+.player button.name:active { transform: none; box-shadow: none; }
+.player input.name { width: 12ch; max-width: 100%; background: var(--crt); border: 2px solid currentColor; padding: 2px 4px; text-transform: uppercase; }
+.player input.name:focus-visible { outline: 2px dashed var(--gold); outline-offset: 1px; }
 .player .box { background: var(--panel); border: 3px solid var(--rule); box-shadow: inset 3px 3px 0 #120e2e; padding: 12px; display: grid; gap: 2px; }
 .player .pts { font-family: var(--font-display); font-size: clamp(22px, 5vw, 30px); font-variant-numeric: tabular-nums; }
 .player .sub, .player .total { color: var(--dim); font-size: 18px; }
@@ -132,7 +139,7 @@ tr.sum td { border-top: 2px solid var(--rule); color: var(--ink); }
 
   <section class="table" aria-label="Game">
     <div class="player p1" id="pl0">
-      <span class="name">PLAYER 1</span>
+      <span class="nameline"><button type="button" class="name" id="name0">PLAYER 1</button><input class="name" id="nameIn0" maxlength="10" autocomplete="off" spellcheck="false" aria-label="Player 1 name" hidden></span>
       <div class="box"><span class="pts" id="pts0">0</span><span class="sub">this round</span></div>
       <span class="total">Game total <b id="tot0">0</b></span>
       <span class="total" id="pass0">Passes left <b id="passn0">3</b></span>
@@ -143,7 +150,7 @@ tr.sum td { border-top: 2px solid var(--rule); color: var(--ink); }
       <canvas id="board" width="560" height="444" tabindex="0" aria-label="Switchbox board. Press 1 to 8 to drop a ball into that column."></canvas>
     </div>
     <div class="player p2" id="pl1">
-      <span class="name" id="name1">PLAYER 2</span>
+      <span class="nameline"><button type="button" class="name" id="name1">PLAYER 2</button><input class="name" id="nameIn1" maxlength="10" autocomplete="off" spellcheck="false" aria-label="Player 2 name" hidden><span class="lvl" id="lvl1"></span></span>
       <div class="box"><span class="pts" id="pts1">0</span><span class="sub">this round</span></div>
       <span class="total">Game total <b id="tot1">0</b></span>
       <span class="total" id="pass1">Passes left <b id="passn1">3</b></span>
@@ -682,7 +689,7 @@ const ORIGINAL = Engine.ROUNDS.map(r => ({ goal: r.goal, half: r.vals.slice(8) }
 const mirrorHalf = half => [...half].reverse().concat(half);
 
 function defaultSettings() {
-  return { opp: 'human', sound: true, passLimit: true, lowball: false, rounds: ORIGINAL.map(r => ({ goal: r.goal, half: r.half.slice() })) };
+  return { opp: 'human', sound: true, passLimit: true, lowball: false, names: ['', '', ''], rounds: ORIGINAL.map(r => ({ goal: r.goal, half: r.half.slice() })) };
 }
 function loadSettings() {
   const d = defaultSettings();
@@ -691,6 +698,7 @@ function loadSettings() {
     if (v && typeof v === 'object') {
       if (OPP_LABEL[v.opp]) d.opp = v.opp;
       for (const k of ['sound', 'passLimit', 'lowball']) if (typeof v[k] === 'boolean') d[k] = v[k];
+      if (Array.isArray(v.names) && v.names.length === 3 && v.names.every(n => typeof n === 'string')) d.names = v.names.map(n => n.slice(0, 10));
       if (Array.isArray(v.rounds) && v.rounds.length === 4 && v.rounds.every(r => r && Number.isInteger(r.goal) && Array.isArray(r.half) && r.half.length === 8)) d.rounds = v.rounds;
     } else {
       const old = localStorage.getItem('switchbox-opp'); if (OPP_LABEL[old]) d.opp = old;
@@ -713,8 +721,12 @@ let aiTimer = null;
 let AI_DELAY_MS = reduceMotion ? 250 : 700;   // a beat so you can see the computer move
 
 const isComputer = p => p === 1 && game.opp !== 'human';
-const nameOf = p => isComputer(p) ? 'Computer' : 'Player ' + (p + 1);
-const who = p => `<span class="who${p + 1}">${nameOf(p)}</span>`;
+// Names are stored as typed in settings.names = [p1, p2 human, p2 computer] and shown in capitals.
+const DEFAULT_NAMES = ['PLAYER 1', 'PLAYER 2', 'COMPUTER'];
+const nameSlot = p => p === 0 ? 0 : isComputer(1) ? 2 : 1;
+const nameOf = p => settings.names[nameSlot(p)].trim().toUpperCase() || DEFAULT_NAMES[nameSlot(p)];
+const esc = t => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const who = p => `<span class="who${p + 1}">${esc(nameOf(p))}</span>`;
 
 // The game can take a move (from anyone) right now.
 function idle() { return !anim && !game.over && !game.settling && overlay.hidden; }
@@ -816,7 +828,7 @@ function endRound() {
   const row = (label, a, b, cls = '') => `<tr class="${cls}"><td>${label}</td><td>${a}</td><td>${b}</td></tr>`;
   const sign = v => (v > 0 ? '+' : '') + v;
   $('ovTable').innerHTML =
-    `<thead><tr><th></th><th class="c1">P1</th><th class="c2">${isComputer(1) ? 'CPU' : 'P2'}</th></tr></thead><tbody>` +
+    `<thead><tr><th></th><th class="c1">${esc(nameOf(0))}</th><th class="c2">${esc(nameOf(1))}</th></tr></thead><tbody>` +
     row('Round points', s[0].points, s[1].points) +
     row(`Goal bonus (${r.goal})`, sign(s[0].bonus), sign(s[1].bonus)) +
     row('Point difference', sign(s[0].diff), sign(s[1].diff)) +
@@ -883,7 +895,8 @@ function updateUI() {
     $('pass' + p).hidden = !game.cfg.passLimit;
     $('passn' + p).textContent = game.passesLeft[p];
   }
-  $('name1').textContent = isComputer(1) ? 'COMPUTER · ' + game.opp.toUpperCase() : 'PLAYER 2';
+  for (const p of [0, 1]) { $('name' + p).textContent = nameOf(p); $('name' + p).setAttribute('aria-label', `${nameOf(p)}. Rename player ${p + 1}`); }
+  $('lvl1').textContent = isComputer(1) ? ' · ' + game.opp.toUpperCase() : '';
   $('rlabel').textContent = `ROUND ${game.round + 1}/4`;
   $('rname').textContent = r.name + (game.cfg.lowball ? ' · LOWBALL' : '');
   $('goal').textContent = r.goal;
@@ -893,6 +906,33 @@ function updateUI() {
   $('btnRandom').disabled = busy;
   $('btnSound').setAttribute('aria-pressed', String(Sound.on));
   $('btnSound').textContent = Sound.on ? 'Sound on' : 'Sound off';
+}
+
+/* ---------- Player names ---------- */
+// Click a name in a score box to rename that player. Names apply as you type.
+function refreshNames() {
+  for (const p of [0, 1]) {
+    document.querySelectorAll(`#status .who${p + 1}, #ovVerdict .who${p + 1}`).forEach(el => { el.textContent = nameOf(p); });
+    const th = document.querySelector(`#ovTable th.c${p + 1}`); if (th) th.textContent = nameOf(p);
+  }
+  game.log = $('status').innerHTML;
+  updateUI();
+}
+for (const p of [0, 1]) {
+  const btn = $('name' + p), inp = $('nameIn' + p);
+  let before = '';
+  const close = () => { inp.hidden = true; btn.hidden = false; btn.focus(); };
+  btn.addEventListener('click', () => {
+    before = settings.names[nameSlot(p)];
+    inp.value = before;
+    btn.hidden = true; inp.hidden = false; inp.focus(); inp.select();
+  });
+  inp.addEventListener('input', () => { settings.names[nameSlot(p)] = inp.value; saveSettings(); refreshNames(); });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); close(); }
+    if (e.key === 'Escape') { e.preventDefault(); settings.names[nameSlot(p)] = before; saveSettings(); refreshNames(); close(); }
+  });
+  inp.addEventListener('blur', () => { if (!inp.hidden) { inp.hidden = true; btn.hidden = false; } });
 }
 
 /* ---------- Options panel ---------- */
@@ -979,7 +1019,7 @@ $('btnSound').addEventListener('click', () => {
 $('opp').addEventListener('change', e => {
   game.opp = settings.opp = e.target.value;
   saveSettings();
-  if (!idle()) { updateUI(); return; }
+  if (!idle()) { refreshNames(); return; }
   setStatus(`Now playing: ${OPP_LABEL[game.opp]}.` + nextPrompt());
   updateUI();
   scheduleComputer();
