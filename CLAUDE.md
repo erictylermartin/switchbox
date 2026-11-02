@@ -29,7 +29,7 @@ index.html                 the whole game: markup, CSS, engine, renderer, UI
 tests/harness.py           Playwright harness (wraps index.html like the artifact host)
 tests/t_suite.py           33 core checks: play, input, full games, phone layout, computer opponent
 tests/t_options.py         25 checks: passes, lowball, custom values, turn limit, sound
-tests/t_players.py         27 checks: player names (later: colors, voice)
+tests/t_players.py         49 checks: player names and colors (later: voice)
 tests/ai_tournament.js     AI-vs-AI games in Node to measure difficulty levels
 tests/screenshot.py        renders a mid-game board to tests/screenshots/
 tools/switch-sketchpad.html  pixel editor the owner used to draw the switch
@@ -51,7 +51,7 @@ Inside `index.html`, in order:
 pip install playwright && python -m playwright install chromium   # once
 python tests/t_suite.py        # expect 33 / 33
 python tests/t_options.py      # expect 25 / 25
-python tests/t_players.py      # expect 27 / 27
+python tests/t_players.py      # expect 49 / 49
 node tests/ai_tournament.js 40 # difficulty check (Hard ~even with Medium, both crush Easy)
 python tests/screenshot.py     # writes tests/screenshots/*.png
 ```
@@ -93,6 +93,11 @@ Artifact rules that matter here:
   as typed, shown in capitals, blank falls back to PLAYER 1 / PLAYER 2 / COMPUTER.
   Stored as `names: [p1, p2Human, p2Computer]`. The computer's box shows
   `NAME · LEVEL`; only the name part is editable. `nameOf(p)` is the single source.
+- **Player colors:** a small chip next to each name opens a 4 x 2 palette (`PALETTE`,
+  8 retro colors from the spec, unchanged after a contrast check). The other player's
+  color is disabled; a saved clash resets Player 2 to the first free color. One color
+  per side (the computer shares Player 2's). `applyColors()` sets `--p1`/`--p2` on
+  `:root` and `COL.p` together. Stored as `colors: ['#…', '#…']`.
 - **Options** apply when the owner presses "Apply and start new game"; settings live
   in localStorage key `switchbox-settings`.
 

@@ -75,7 +75,51 @@ def t_mobile(pg):
     pg.keyboard.press('Enter')
     pg.screenshot(path=str(SHOTS / 'names_phone.png'))
 
-for t, w in [(t_names, 900), (t_computer_name, 900), (t_escape, 900), (t_mobile, 390)]:
+def swatch(p, hexv): return f'#pal{p} button[data-hex="{hexv}"]'
+BOX = 'p => getComputedStyle(document.querySelector(`#pl${p} .box`)).borderColor'
+
+def t_colors(pg):
+    check('default colors are cyan and pink', pg.evaluate('COL.p') == ['#5fd3e6', '#f2709c'], pg.evaluate('COL.p'))
+    check('the palette starts closed', not pg.is_visible('#pal0'))
+    pg.click('#chip0')
+    check('the chip opens the palette', pg.is_visible('#pal0') and pg.get_attribute('#chip0', 'aria-expanded') == 'true')
+    check('the palette has 8 swatches', pg.locator('#pal0 button').count() == 8)
+    check('the current color is marked', pg.get_attribute(swatch(0, '#5fd3e6'), 'aria-checked') == 'true')
+    check("the other player's color is disabled", pg.is_disabled(swatch(0, '#f2709c')))
+    pg.click(swatch(0, '#ffd75e'))
+    check('picking a color closes the palette', not pg.is_visible('#pal0'))
+    check('picking a color changes the falling-ball color', pg.evaluate('COL.p[0]') == '#ffd75e')
+    check('it changes the CSS variable', pg.evaluate('getComputedStyle(document.documentElement).getPropertyValue("--p1").trim()') == '#ffd75e')
+    check('the active box border uses the new color', pg.evaluate(BOX, 0) == 'rgb(255, 215, 94)', pg.evaluate(BOX, 0))
+    check('the name uses the new color', pg.evaluate('getComputedStyle(document.getElementById("name0")).color') == 'rgb(255, 215, 94)')
+    pg.click('#chip1')
+    check("Player 2 can't pick Player 1's new color", pg.is_disabled(swatch(1, '#ffd75e')) and not pg.is_disabled(swatch(1, '#5fd3e6')))
+    pg.keyboard.press('Escape')
+    check('Escape closes the palette and returns focus to the chip', not pg.is_visible('#pal1') and pg.evaluate('document.activeElement.id') == 'chip1')
+    pg.click('#chip1'); pg.keyboard.press('ArrowRight'); pg.keyboard.press('Enter')
+    check('arrow keys and Enter pick a color', pg.evaluate('COL.p[1]') not in ('#f2709c', '#ffd75e'), pg.evaluate('COL.p'))
+    pg.click('#chip1'); pg.mouse.click(5, 990)
+    check('clicking elsewhere closes the palette', not pg.is_visible('#pal1'))
+    pg.keyboard.press('3'); pg.wait_for_function('!anim')
+    check('Player 2 box uses its color on its turn', pg.evaluate(BOX, 1) != 'rgb(74, 63, 151)', pg.evaluate(BOX, 1))
+    saved = pg.evaluate('COL.p.slice()')
+    pg.reload(); pg.wait_for_timeout(300)
+    check('colors persist after reload', pg.evaluate('COL.p') == saved, (saved, pg.evaluate('COL.p')))
+
+def t_color_clash(pg):
+    pg.evaluate('localStorage.setItem("switchbox-settings", JSON.stringify({colors: ["#9be564", "#9be564"]}))')
+    pg.reload(); pg.wait_for_timeout(300)
+    c = pg.evaluate('COL.p')
+    check('a saved clash resets Player 2 to the first free color', c == ['#9be564', '#5fd3e6'], c)
+
+def t_mobile_colors(pg):
+    pg.click('#chip1')
+    w = pg.evaluate('({sw: document.documentElement.scrollWidth, iw: innerWidth})')
+    check('the open palette fits on a phone', w['sw'] <= w['iw'], w)
+    pg.screenshot(path=str(SHOTS / 'colors_phone.png'))
+
+for t, w in [(t_names, 900), (t_computer_name, 900), (t_escape, 900), (t_mobile, 390),
+             (t_colors, 900), (t_color_clash, 900), (t_mobile_colors, 390)]:
     errs, _ = run(t, w)
     errs = [e for e in errs if 'ERR_FAILED' not in e]
     check(f'{t.__name__}: no page errors', not errs, errs[:3])

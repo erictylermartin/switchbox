@@ -50,6 +50,21 @@ h1 { font-family: var(--font-display); font-size: clamp(18px, 4vw, 28px); margin
 .player .name { font-family: var(--font-display); font-size: 11px; letter-spacing: 1px; }
 .player.p1 .name, .player.p1 .lvl { color: var(--p1); }
 .player.p2 .name, .player.p2 .lvl { color: var(--p2); }
+.player .nameline { position: relative; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+@media (min-width: 780px) { .player.p2 .nameline { justify-content: flex-end; } }
+/* Color chip next to the name opens a small palette of swatches. */
+.player button.chip { width: 16px; height: 16px; padding: 0; border: 2px solid #0c0a22; box-shadow: 0 0 0 2px var(--rule); flex: none; }
+.player.p1 .chip { background: var(--p1); } .player.p2 .chip { background: var(--p2); }
+.player button.chip:active { transform: none; }
+.palette { position: absolute; top: calc(100% + 6px); left: 0; z-index: 5; display: grid; grid-template-columns: repeat(4, 30px); gap: 6px;
+  background: var(--panel); border: 3px solid var(--rule); box-shadow: 4px 4px 0 #0c0a22; padding: 8px; }
+@media (min-width: 780px) { .player.p2 .palette { left: auto; right: 0; } }
+.palette button { width: 30px; height: 30px; padding: 0; border: 3px solid #0c0a22; box-shadow: none; display: grid; place-items: center;
+  font-family: var(--font-body); font-size: 22px; line-height: 1; color: #120e2e; }
+.palette button[aria-checked="true"] { border-color: var(--ink); box-shadow: 0 0 0 2px #0c0a22; }
+.palette button[aria-checked="true"]::after { content: "✓"; }
+.palette button:disabled { opacity: .4; background-image: linear-gradient(to top right, transparent calc(50% - 2px), #0c0a22 calc(50% - 2px), #0c0a22 calc(50% + 2px), transparent calc(50% + 2px)); }
+.palette button:active:not(:disabled) { transform: none; }
 .player .lvl { font-family: var(--font-display); font-size: 11px; letter-spacing: 1px; }
 /* The name label is a button that turns into a text field to rename the player. */
 .player button.name { background: none; border: 0; box-shadow: none; padding: 0; cursor: text; text-align: inherit; text-decoration: underline dotted transparent; text-underline-offset: 4px; transition: text-decoration-color .15s; }
@@ -139,7 +154,7 @@ tr.sum td { border-top: 2px solid var(--rule); color: var(--ink); }
 
   <section class="table" aria-label="Game">
     <div class="player p1" id="pl0">
-      <span class="nameline"><button type="button" class="name" id="name0">PLAYER 1</button><input class="name" id="nameIn0" maxlength="10" autocomplete="off" spellcheck="false" aria-label="Player 1 name" hidden></span>
+      <span class="nameline"><button type="button" class="name" id="name0">PLAYER 1</button><input class="name" id="nameIn0" maxlength="10" autocomplete="off" spellcheck="false" aria-label="Player 1 name" hidden><button type="button" class="chip" id="chip0" title="Change color" aria-label="Change Player 1 color" aria-haspopup="true" aria-expanded="false"></button><span class="palette" id="pal0" role="radiogroup" aria-label="Player 1 color" hidden></span></span>
       <div class="box"><span class="pts" id="pts0">0</span><span class="sub">this round</span></div>
       <span class="total">Game total <b id="tot0">0</b></span>
       <span class="total" id="pass0">Passes left <b id="passn0">3</b></span>
@@ -150,7 +165,7 @@ tr.sum td { border-top: 2px solid var(--rule); color: var(--ink); }
       <canvas id="board" width="560" height="444" tabindex="0" aria-label="Switchbox board. Press 1 to 8 to drop a ball into that column."></canvas>
     </div>
     <div class="player p2" id="pl1">
-      <span class="nameline"><button type="button" class="name" id="name1">PLAYER 2</button><input class="name" id="nameIn1" maxlength="10" autocomplete="off" spellcheck="false" aria-label="Player 2 name" hidden><span class="lvl" id="lvl1"></span></span>
+      <span class="nameline"><button type="button" class="chip" id="chip1" title="Change color" aria-label="Change Player 2 color" aria-haspopup="true" aria-expanded="false"></button><span class="palette" id="pal1" role="radiogroup" aria-label="Player 2 color" hidden></span><button type="button" class="name" id="name1">PLAYER 2</button><input class="name" id="nameIn1" maxlength="10" autocomplete="off" spellcheck="false" aria-label="Player 2 name" hidden><span class="lvl" id="lvl1"></span></span>
       <div class="box"><span class="pts" id="pts1">0</span><span class="sub">this round</span></div>
       <span class="total">Game total <b id="tot1">0</b></span>
       <span class="total" id="pass1">Passes left <b id="passn1">3</b></span>
@@ -688,8 +703,12 @@ const TURN_CAP = 120;              // a round ends here regardless, so custom va
 const ORIGINAL = Engine.ROUNDS.map(r => ({ goal: r.goal, half: r.vals.slice(8) }));   // centre -> edge
 const mirrorHalf = half => [...half].reverse().concat(half);
 
+const PALETTE = [
+  { name: 'Cyan', hex: '#5fd3e6' }, { name: 'Pink', hex: '#f2709c' }, { name: 'Gold', hex: '#ffd75e' }, { name: 'Lime', hex: '#9be564' },
+  { name: 'Orange', hex: '#ff9f43' }, { name: 'Red', hex: '#ff5c5c' }, { name: 'Cream', hex: '#f4e9cf' }, { name: 'Teal', hex: '#2ec4b6' },
+];
 function defaultSettings() {
-  return { opp: 'human', sound: true, passLimit: true, lowball: false, names: ['', '', ''], rounds: ORIGINAL.map(r => ({ goal: r.goal, half: r.half.slice() })) };
+  return { opp: 'human', sound: true, passLimit: true, lowball: false, names: ['', '', ''], colors: PALETTE.slice(0, 2).map(c => c.hex), rounds: ORIGINAL.map(r => ({ goal: r.goal, half: r.half.slice() })) };
 }
 function loadSettings() {
   const d = defaultSettings();
@@ -698,6 +717,10 @@ function loadSettings() {
     if (v && typeof v === 'object') {
       if (OPP_LABEL[v.opp]) d.opp = v.opp;
       for (const k of ['sound', 'passLimit', 'lowball']) if (typeof v[k] === 'boolean') d[k] = v[k];
+      if (Array.isArray(v.colors) && v.colors.length === 2 && v.colors.every(c => PALETTE.some(q => q.hex === c))) {
+        d.colors = v.colors.slice();
+        if (d.colors[0] === d.colors[1]) d.colors[1] = PALETTE.find(q => q.hex !== d.colors[0]).hex;
+      }
       if (Array.isArray(v.names) && v.names.length === 3 && v.names.every(n => typeof n === 'string')) d.names = v.names.map(n => n.slice(0, 10));
       if (Array.isArray(v.rounds) && v.rounds.length === 4 && v.rounds.every(r => r && Number.isInteger(r.goal) && Array.isArray(r.half) && r.half.length === 8)) d.rounds = v.rounds;
     } else {
@@ -934,6 +957,60 @@ for (const p of [0, 1]) {
   });
   inp.addEventListener('blur', () => { if (!inp.hidden) { inp.hidden = true; btn.hidden = false; } });
 }
+
+/* ---------- Player colors ---------- */
+// The chip by each name opens a palette. The CSS variables and COL.p change together.
+function applyColors() {
+  for (const p of [0, 1]) {
+    document.documentElement.style.setProperty('--p' + (p + 1), settings.colors[p]);
+    COL.p[p] = settings.colors[p];
+    $('pal' + p).querySelectorAll('button').forEach(b => {
+      const mine = b.dataset.hex === settings.colors[p];
+      b.setAttribute('aria-checked', String(mine));
+      b.tabIndex = mine ? 0 : -1;
+      b.disabled = b.dataset.hex === settings.colors[1 - p];
+    });
+  }
+}
+function closePalette(p, refocus) {
+  if ($('pal' + p).hidden) return;
+  $('pal' + p).hidden = true;
+  $('chip' + p).setAttribute('aria-expanded', 'false');
+  if (refocus) $('chip' + p).focus();
+}
+for (const p of [0, 1]) {
+  const pal = $('pal' + p), chip = $('chip' + p);
+  pal.innerHTML = PALETTE.map(c => `<button type="button" role="radio" data-hex="${c.hex}" style="background-color:${c.hex}" aria-label="${c.name}" title="${c.name}"></button>`).join('');
+  chip.addEventListener('click', () => {
+    if (!pal.hidden) { closePalette(p, false); return; }
+    closePalette(1 - p, false);
+    pal.hidden = false;
+    chip.setAttribute('aria-expanded', 'true');
+    pal.querySelector('[aria-checked="true"]').focus();
+  });
+  pal.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || b.disabled) return;
+    settings.colors[p] = b.dataset.hex;
+    saveSettings();
+    applyColors();
+    closePalette(p, true);
+  });
+  pal.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { e.preventDefault(); closePalette(p, true); return; }
+    const step = { ArrowRight: 1, ArrowDown: 4, ArrowLeft: -1, ArrowUp: -4 }[e.key];
+    if (!step) return;
+    e.preventDefault();
+    const btns = [...pal.querySelectorAll('button')];
+    let i = btns.indexOf(document.activeElement);
+    do { i = (i + step + btns.length) % btns.length; } while (btns[i].disabled);
+    btns[i].focus();
+  });
+}
+document.addEventListener('pointerdown', e => {
+  for (const p of [0, 1]) if (!e.target.closest(`#pal${p}, #chip${p}`)) closePalette(p, false);
+});
+applyColors();
 
 /* ---------- Options panel ---------- */
 function buildValueTable() {
